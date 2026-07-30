@@ -82,7 +82,7 @@ async def convert_lead(
         
     except Exception as e:
         logger.error(f"Failed to convert lead: {e}")
-        raise HTTPException(status_code=500, detail(str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{lead_id}")
@@ -111,7 +111,7 @@ async def get_lead(
         
     except Exception as e:
         logger.error(f"Failed to get lead: {e}")
-        raise HTTPException(status_code=500, detail(str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/")
@@ -162,4 +162,4 @@ async def list_leads(
         
     except Exception as e:
         logger.error(f"Failed to list leads: {e}")
-        raise HTTPException(status_code=500, detail(str(e))
+        raise HTTPException(status_code=500, detail=str(e))

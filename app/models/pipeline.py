@@ -26,7 +26,7 @@ class PipelineStage(Base):
     win_probability = Column(Integer, default=0)  # percentage
     
     # Metadata
-    metadata = Column(JSON, nullable=True)
+    extra_metadata = Column(JSON, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -57,7 +57,7 @@ class Deal(Base):
     is_lost = Column(Boolean, default=False)
     
     # Metadata
-    metadata = Column(JSON, nullable=True)
+    extra_metadata = Column(JSON, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

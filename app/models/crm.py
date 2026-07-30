@@ -30,7 +30,7 @@ class CRMIntegration(Base):
     sync_status = Column(String(20), default="active")  # active, error, paused
     
     # Metadata
-    metadata = Column(JSON, nullable=True)
+    extra_metadata = Column(JSON, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
