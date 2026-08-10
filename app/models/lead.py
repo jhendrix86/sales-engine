@@ -10,6 +10,7 @@ import uuid
 import enum
 
 from app.database import Base
+from app.models.tenant_base import TenantBase
 
 
 class LeadStatus(str, enum.Enum):
@@ -32,7 +33,7 @@ class LeadSource(str, enum.Enum):
     PARTNER = "partner"
 
 
-class Lead(Base):
+class Lead(TenantBase, Base):
     """Lead model"""
     __tablename__ = "leads"
     

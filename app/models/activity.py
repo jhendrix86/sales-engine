@@ -10,6 +10,7 @@ import uuid
 import enum
 
 from app.database import Base
+from app.models.tenant_base import TenantBase
 
 
 class ActivityType(str, enum.Enum):
@@ -21,7 +22,7 @@ class ActivityType(str, enum.Enum):
     TASK = "task"
 
 
-class Activity(Base):
+class Activity(TenantBase, Base):
     """Activity model"""
     __tablename__ = "activities"
     

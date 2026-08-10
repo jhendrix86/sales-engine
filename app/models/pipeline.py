@@ -9,9 +9,10 @@ from datetime import datetime
 import uuid
 
 from app.database import Base
+from app.models.tenant_base import TenantBase
 
 
-class PipelineStage(Base):
+class PipelineStage(TenantBase, Base):
     """Pipeline stage model"""
     __tablename__ = "pipeline_stages"
     
@@ -36,7 +37,7 @@ class PipelineStage(Base):
         return f"<PipelineStage {self.name} - {self.win_probability}%>"
 
 
-class Deal(Base):
+class Deal(TenantBase, Base):
     """Deal model"""
     __tablename__ = "deals"
     

@@ -9,9 +9,10 @@ from datetime import datetime
 import uuid
 
 from app.database import Base
+from app.models.tenant_base import TenantBase
 
 
-class CRMIntegration(Base):
+class CRMIntegration(TenantBase, Base):
     """CRM integration model"""
     __tablename__ = "crm_integrations"
     

@@ -10,6 +10,7 @@ import uuid
 import enum
 
 from app.database import Base
+from app.models.tenant_base import TenantBase
 
 
 class ProposalStatus(str, enum.Enum):
@@ -22,7 +23,7 @@ class ProposalStatus(str, enum.Enum):
     EXPIRED = "expired"
 
 
-class Proposal(Base):
+class Proposal(TenantBase, Base):
     """Proposal model"""
     __tablename__ = "proposals"
     
