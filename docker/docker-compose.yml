@@ -10,7 +10,7 @@ services:
       - "8041:8041"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/sales
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://redis:6379/10
       - HUBSPOT_API_KEY=${HUBSPOT_API_KEY}
       - SALESFORCE_API_KEY=${SALESFORCE_API_KEY}
       - PIPEDRIVE_API_KEY=${PIPEDRIVE_API_KEY}
@@ -18,36 +18,13 @@ services:
       - MARKETING_AUTOMATION_URL=http://marketing-automation-engine:8039
       - REVENUE_OPERATIONS_URL=http://revenue-operations-engine:8036
       - ANALYTICS_ENGINE_URL=http://analytics-engine:8042
-    depends_on:
-      - postgres
-      - redis
+    # No depends_on here - postgres/redis moved to shared infra
+    # (deploy/docker-compose.infra.yml), a different compose project.
+    # Bring that up first: deploy/03-build-and-up.sh infra-up
     networks:
-      - sales-network
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:15-alpine
-    container_name: sales-postgres
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=sales
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - sales-network
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    container_name: sales-redis
-    networks:
-      - sales-network
+      - os42-shared
     restart: unless-stopped
 
 networks:
-  sales-network:
-    driver: bridge
-
-volumes:
-  postgres-data:
+  os42-shared:
+    external: true
