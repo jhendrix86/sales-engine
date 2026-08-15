@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     marketing_automation_url: str = os.getenv("MARKETING_AUTOMATION_URL", "http://localhost:8039")
     revenue_operations_url: str = os.getenv("REVENUE_OPERATIONS_URL", "http://localhost:8036")
     analytics_engine_url: str = os.getenv("ANALYTICS_ENGINE_URL", "http://localhost:8042")
+    notification_engine_url: str = os.getenv("NOTIFICATION_ENGINE_URL", "http://localhost:8037")
     
     class Config:
         env_file = ".env"

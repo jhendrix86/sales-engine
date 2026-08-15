@@ -31,10 +31,14 @@ async def init_db():
         async with engine.begin() as conn:
             # Import all models here to ensure they're registered
             from app.models import tenant, lead, pipeline, crm, proposal, activity
-            
+
             # Create all tables
             await conn.run_sync(Base.metadata.create_all)
-        
+
+        from app.seed_pipeline_stages import seed_default_stages
+        async with AsyncSessionLocal() as session:
+            await seed_default_stages(session)
+
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")

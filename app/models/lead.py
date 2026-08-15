@@ -56,7 +56,13 @@ class Lead(TenantBase, Base):
     
     # Pipeline
     pipeline_stage = Column(String(50), default="new")
-    
+
+    # Ownership - a plain string, not a FK to a User table, matching how
+    # this fleet represents lightweight "who" fields elsewhere (e.g.
+    # notification-engine's Alert.resolved_by) rather than building a
+    # full auth/user system just for rep attribution.
+    assigned_rep = Column(String(255), nullable=True)
+
     # CRM integration
     crm_contact_id = Column(String(255), nullable=True)
     crm_deal_id = Column(String(255), nullable=True)

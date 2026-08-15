@@ -51,6 +51,7 @@ class Proposal(TenantBase, Base):
     # Delivery
     sent_at = Column(DateTime, nullable=True)
     viewed_at = Column(DateTime, nullable=True)
+    delivery_error = Column(String(500), nullable=True)
     
     # Metadata
     extra_metadata = Column(JSON, nullable=True)

@@ -1,8 +1,11 @@
 """
-Pipeline router
+Pipeline router - real DB-backed CRUD against pipeline_stages/deals.
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from datetime import datetime
@@ -10,6 +13,9 @@ from pydantic import BaseModel
 from loguru import logger
 
 from app.database import get_db
+from app.models.lead import Lead
+from app.models.pipeline import Deal, PipelineStage
+from app.models.tenant_base import apply_tenant_context
 
 router = APIRouter()
 
@@ -21,25 +27,48 @@ class CreateDealRequest(BaseModel):
     amount: int
     currency: Optional[str] = "USD"
     stage_id: Optional[str] = None
-    expected_close_date: Optional[str] = None
+    expected_close_date: Optional[datetime] = None
+
+
+def _serialize_stage(stage: PipelineStage) -> dict:
+    return {"id": str(stage.id), "name": stage.name, "order": stage.order, "win_probability": stage.win_probability}
+
+
+def _serialize_deal(deal: Deal) -> dict:
+    return {
+        "id": str(deal.id),
+        "lead_id": str(deal.lead_id),
+        "name": deal.name,
+        "amount": deal.amount,
+        "currency": deal.currency,
+        "stage_id": str(deal.stage_id) if deal.stage_id else None,
+        "expected_close_date": deal.expected_close_date.isoformat() if deal.expected_close_date else None,
+        "is_won": deal.is_won,
+        "is_lost": deal.is_lost,
+        "created_at": deal.created_at.isoformat(),
+        "closed_at": deal.closed_at.isoformat() if deal.closed_at else None,
+    }
+
+
+async def _get_deal_or_404(db: AsyncSession, deal_id: str) -> Deal:
+    try:
+        deal_uuid = uuid.UUID(deal_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Deal '{deal_id}' not found")
+
+    deal = await db.get(Deal, deal_uuid)
+    if deal is None:
+        raise HTTPException(status_code=404, detail=f"Deal '{deal_id}' not found")
+    return deal
 
 
 @router.get("/stages")
 async def list_pipeline_stages(db: AsyncSession = Depends(get_db)):
-    """List pipeline stages"""
+    """List pipeline stages, real query against the seeded stages"""
     try:
-        logger.info("Listing pipeline stages")
-
-        # In production, this would query from database
-        # For now, return a mock response
-        stages = [
-            {"id": "stage_001", "name": "New", "order": 1, "win_probability": 10},
-            {"id": "stage_002", "name": "Qualified", "order": 2, "win_probability": 30},
-            {"id": "stage_003", "name": "Proposal", "order": 3, "win_probability": 60},
-            {"id": "stage_004", "name": "Closed Won", "order": 4, "win_probability": 100},
-        ]
-
-        return {"total": len(stages), "stages": stages}
+        result = await db.execute(select(PipelineStage).order_by(PipelineStage.order))
+        stages = result.scalars().all()
+        return {"total": len(stages), "stages": [_serialize_stage(s) for s in stages]}
 
     except Exception as e:
         logger.error(f"Failed to list pipeline stages: {e}")
@@ -47,32 +76,48 @@ async def list_pipeline_stages(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/deals")
-async def create_deal(
-    request: CreateDealRequest,
-    db: AsyncSession = Depends(get_db)
-):
+async def create_deal(request: CreateDealRequest, db: AsyncSession = Depends(get_db)):
     """Create a deal in the pipeline"""
     try:
+        try:
+            lead_uuid = uuid.UUID(request.lead_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"Lead '{request.lead_id}' not found")
+
+        lead = await db.get(Lead, lead_uuid)
+        if lead is None:
+            raise HTTPException(status_code=404, detail=f"Lead '{request.lead_id}' not found")
+
+        stage = None
+        if request.stage_id:
+            try:
+                stage = await db.get(PipelineStage, uuid.UUID(request.stage_id))
+            except ValueError:
+                stage = None
+            if stage is None:
+                raise HTTPException(status_code=404, detail=f"Pipeline stage '{request.stage_id}' not found")
+
         logger.info(f"Creating deal: {request.name}")
 
-        # In production, this would save to database
-        # For now, return a mock response
-        deal = {
-            "id": "deal_123",
-            "lead_id": request.lead_id,
-            "name": request.name,
-            "amount": request.amount,
-            "currency": request.currency,
-            "stage_id": request.stage_id,
-            "expected_close_date": request.expected_close_date,
-            "is_won": False,
-            "is_lost": False,
-            "created_at": datetime.utcnow().isoformat()
-        }
+        deal = Deal(
+            lead_id=lead.id,
+            name=request.name,
+            amount=request.amount,
+            currency=request.currency,
+            stage_id=stage.id if stage else None,
+            expected_close_date=request.expected_close_date,
+        )
+        apply_tenant_context(deal)
 
-        logger.info(f"Deal created: {deal['id']}")
-        return deal
+        db.add(deal)
+        await db.commit()
+        await db.refresh(deal)
 
+        logger.info(f"Deal created: {deal.id}")
+        return _serialize_deal(deal)
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create deal: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -82,23 +127,11 @@ async def create_deal(
 async def get_deal(deal_id: str, db: AsyncSession = Depends(get_db)):
     """Get deal details"""
     try:
-        logger.info(f"Getting deal details for {deal_id}")
+        deal = await _get_deal_or_404(db, deal_id)
+        return _serialize_deal(deal)
 
-        # In production, this would query from database
-        # For now, return a mock response
-        deal = {
-            "id": deal_id,
-            "name": "Acme Corp Renewal",
-            "amount": 25000,
-            "currency": "USD",
-            "stage_id": "stage_003",
-            "is_won": False,
-            "is_lost": False,
-            "created_at": datetime.utcnow().isoformat()
-        }
-
-        return deal
-
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get deal: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -110,24 +143,29 @@ async def list_deals(
     is_won: Optional[bool] = None,
     limit: int = 50,
     offset: int = 0,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """List deals"""
+    """List deals, real filters applied against the database"""
     try:
-        logger.info("Listing deals")
+        query = select(Deal)
+        if stage_id is not None:
+            try:
+                query = query.where(Deal.stage_id == uuid.UUID(stage_id))
+            except ValueError:
+                return {"total": 0, "deals": [], "filters": {"stage_id": stage_id, "is_won": is_won}, "pagination": {"limit": limit, "offset": offset}}
+        if is_won is not None:
+            query = query.where(Deal.is_won == is_won)
 
-        # In production, this would query from database with filters
-        # For now, return a mock response
-        deals = [
-            {"id": "deal_001", "name": "Acme Corp Renewal", "amount": 25000, "stage_id": "stage_003"},
-            {"id": "deal_002", "name": "Tech Corp Expansion", "amount": 12000, "stage_id": "stage_002"},
-        ]
+        query = query.order_by(Deal.created_at.desc()).offset(offset).limit(limit)
+
+        result = await db.execute(query)
+        deals = result.scalars().all()
 
         return {
             "total": len(deals),
-            "deals": deals,
+            "deals": [_serialize_deal(d) for d in deals],
             "filters": {"stage_id": stage_id, "is_won": is_won},
-            "pagination": {"limit": limit, "offset": offset}
+            "pagination": {"limit": limit, "offset": offset},
         }
 
     except Exception as e:
@@ -136,25 +174,30 @@ async def list_deals(
 
 
 @router.post("/deals/{deal_id}/move")
-async def move_deal_stage(
-    deal_id: str,
-    stage_id: str,
-    db: AsyncSession = Depends(get_db)
-):
-    """Move a deal to a different pipeline stage"""
+async def move_deal_stage(deal_id: str, stage_id: str, db: AsyncSession = Depends(get_db)):
+    """Move a deal to a different pipeline stage - real existence check on the target stage"""
     try:
+        deal = await _get_deal_or_404(db, deal_id)
+
+        try:
+            stage_uuid = uuid.UUID(stage_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"Pipeline stage '{stage_id}' not found")
+
+        stage = await db.get(PipelineStage, stage_uuid)
+        if stage is None:
+            raise HTTPException(status_code=404, detail=f"Pipeline stage '{stage_id}' not found")
+
         logger.info(f"Moving deal {deal_id} to stage {stage_id}")
 
-        # In production, this would update database
-        # For now, return a mock response
-        deal = {
-            "id": deal_id,
-            "stage_id": stage_id,
-            "updated_at": datetime.utcnow().isoformat()
-        }
+        deal.stage_id = stage.id
+        await db.commit()
+        await db.refresh(deal)
 
-        return deal
+        return _serialize_deal(deal)
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to move deal: {e}")
         raise HTTPException(status_code=500, detail=str(e))
