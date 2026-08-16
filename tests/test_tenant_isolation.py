@@ -1,8 +1,6 @@
 """
-Verifies tenant context assignment for sales-engine endpoints.
-Tests that apply_tenant_context() correctly assigns tenant_id on create.
-Note: Automatic query filtering is not yet implemented - this test validates
-create-time tenant assignment only.
+Verifies tenant isolation for sales-engine endpoints.
+Tests that automatic query filtering actually isolates data between tenants.
 """
 
 # Use fixed UUIDs that match what we create in conftest
@@ -10,72 +8,93 @@ TENANT_A = "3e2a7c54-a950-48f3-9eb9-d1eb6b2d1be2"
 TENANT_B = "00000000-0000-0000-0000-000000000001"
 
 
-async def test_apply_tenant_context_on_lead_create(client, db_session):
-    """Verify that apply_tenant_context assigns tenant_id on lead creation."""
-    from app.models.lead import Lead
-    import uuid
-    
-    # Create lead for tenant A
-    result = await client.post(
+async def _create_lead(client, tenant_id, name):
+    resp = await client.post(
         "/leads/",
         json={
-            "name": "John Doe",
-            "email": "john@example.com",
+            "name": name,
+            "email": f"{name.lower().replace(' ', '.')}@example.com",
             "company": "Test Company",
             "estimated_value": 10000
         },
-        headers={"X-Tenant-ID": TENANT_A}
+        headers={"X-Tenant-ID": tenant_id},
     )
-    assert result.status_code == 200
-    lead_id = result.json()["id"]
-    
-    # Verify tenant_id was correctly assigned
-    lead = await db_session.get(Lead, uuid.UUID(lead_id))
-    assert lead is not None
-    assert str(lead.tenant_id) == TENANT_A
+    assert resp.status_code == 200
+    return resp.json()["id"]
 
 
-async def test_apply_tenant_context_on_deal_create(client, db_session):
-    """Verify that apply_tenant_context assigns tenant_id on deal creation."""
-    from app.models.pipeline import Deal
-    import uuid
-    
-    # Create lead for tenant A
-    lead_result = await client.post(
-        "/leads/",
-        json={
-            "name": "John Doe",
-            "email": "john@example.com",
-            "company": "Test Company",
-            "estimated_value": 10000
-        },
-        headers={"X-Tenant-ID": TENANT_A}
+async def test_tenant_cannot_read_another_tenants_lead(client):
+    lead_id = await _create_lead(client, TENANT_A, "John Doe")
+
+    same_tenant = await client.get(f"/leads/{lead_id}", headers={"X-Tenant-ID": TENANT_A})
+    assert same_tenant.status_code == 200
+
+    other_tenant = await client.get(f"/leads/{lead_id}", headers={"X-Tenant-ID": TENANT_B})
+    assert other_tenant.status_code == 404
+
+
+async def test_list_leads_is_scoped_per_tenant(client):
+    await _create_lead(client, TENANT_A, "Alice Smith")
+    await _create_lead(client, TENANT_A, "Bob Johnson")
+    await _create_lead(client, TENANT_B, "Charlie Brown")
+
+    a_listing = await client.get("/leads/", headers={"X-Tenant-ID": TENANT_A})
+    assert a_listing.status_code == 200
+    assert a_listing.json()["total"] == 2
+
+    b_listing = await client.get("/leads/", headers={"X-Tenant-ID": TENANT_B})
+    assert b_listing.status_code == 200
+    assert b_listing.json()["total"] == 1
+
+
+async def test_no_tenant_header_sees_everything(client):
+    """Fail-open posture: no X-Tenant-ID means no filtering is applied."""
+    await _create_lead(client, TENANT_A, "Alice Smith")
+    await _create_lead(client, TENANT_B, "Bob Johnson")
+
+    unscoped = await client.get("/leads/")
+    assert unscoped.status_code == 200
+    assert unscoped.json()["total"] == 2
+
+
+async def test_tenant_cannot_modify_another_tenants_lead(client):
+    lead_id = await _create_lead(client, TENANT_A, "John Doe")
+
+    # Try to convert as tenant B
+    convert_response = await client.post(
+        f"/leads/{lead_id}/convert",
+        json={"deal_name": "Converted Deal"},
+        headers={"X-Tenant-ID": TENANT_B}
     )
-    assert lead_result.status_code == 200
-    lead_id = lead_result.json()["id"]
-    
+    assert convert_response.status_code == 404
+
+
+async def test_deal_creation_respects_tenant_scoping(client):
+    """Deal creation should be tenant-scoped."""
+    lead_id = await _create_lead(client, TENANT_A, "Test Lead")
+
     # Convert to deal for tenant A
-    deal_result = await client.post(
+    deal_resp = await client.post(
         f"/leads/{lead_id}/convert",
         json={"deal_name": "Test Deal"},
         headers={"X-Tenant-ID": TENANT_A}
     )
-    assert deal_result.status_code == 200
-    deal_id = deal_result.json()["deal_id"]
-    
-    # Verify deal tenant_id was correctly assigned
-    deal = await db_session.get(Deal, uuid.UUID(deal_id))
-    assert deal is not None
-    assert str(deal.tenant_id) == TENANT_A
+    assert deal_resp.status_code == 200
+    deal_id = deal_resp.json()["deal_id"]
+
+    # Tenant A can see the deal
+    a_deal = await client.get(f"/pipeline/deals/{deal_id}", headers={"X-Tenant-ID": TENANT_A})
+    assert a_deal.status_code == 200
+
+    # Tenant B cannot see the deal
+    b_deal = await client.get(f"/pipeline/deals/{deal_id}", headers={"X-Tenant-ID": TENANT_B})
+    assert b_deal.status_code == 404
 
 
-async def test_apply_tenant_context_on_crm_integration_create(client, db_session):
-    """Verify that apply_tenant_context assigns tenant_id on CRM integration creation."""
-    from app.models.crm import CRMIntegration
-    import uuid
-    
+async def test_crm_integration_respects_tenant_scoping(client):
+    """CRM integrations should be tenant-scoped."""
     # Create CRM integration for tenant A
-    result = await client.post(
+    crm_resp = await client.post(
         "/crm/sync",
         json={
             "crm_type": "hubspot",
@@ -84,48 +103,13 @@ async def test_apply_tenant_context_on_crm_integration_create(client, db_session
         },
         headers={"X-Tenant-ID": TENANT_A}
     )
-    assert result.status_code == 200
-    integration_id = result.json()["id"]
-    
-    # Verify integration tenant_id was correctly assigned
-    integration = await db_session.get(CRMIntegration, uuid.UUID(integration_id))
-    assert integration is not None
-    assert str(integration.tenant_id) == TENANT_A
+    assert crm_resp.status_code == 200
+    integration_id = crm_resp.json()["id"]
 
+    # Tenant A can see the integration
+    a_integration = await client.get(f"/crm/{integration_id}", headers={"X-Tenant-ID": TENANT_A})
+    assert a_integration.status_code == 200
 
-async def test_apply_tenant_context_on_proposal_create(client, db_session):
-    """Verify that apply_tenant_context assigns tenant_id on proposal creation."""
-    from app.models.proposal import Proposal
-    import uuid
-    
-    # Create lead for tenant A
-    lead_result = await client.post(
-        "/leads/",
-        json={
-            "name": "John Doe",
-            "email": "john@example.com",
-            "company": "Test Company",
-            "estimated_value": 10000
-        },
-        headers={"X-Tenant-ID": TENANT_A}
-    )
-    assert lead_result.status_code == 200
-    lead_id = lead_result.json()["id"]
-    
-    # Create proposal for tenant A
-    proposal_result = await client.post(
-        f"/proposals/create/{lead_id}",
-        json={
-            "title": "Test Proposal",
-            "amount": 5000,
-            "valid_until": "2026-12-31"
-        },
-        headers={"X-Tenant-ID": TENANT_A}
-    )
-    assert proposal_result.status_code == 200
-    proposal_id = proposal_result.json()["id"]
-    
-    # Verify proposal tenant_id was correctly assigned
-    proposal = await db_session.get(Proposal, uuid.UUID(proposal_id))
-    assert proposal is not None
-    assert str(proposal.tenant_id) == TENANT_A
+    # Tenant B cannot see the integration
+    b_integration = await client.get(f"/crm/{integration_id}", headers={"X-Tenant-ID": TENANT_B})
+    assert b_integration.status_code == 404
