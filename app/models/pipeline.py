@@ -3,7 +3,7 @@ Pipeline models
 """
 
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, ForeignKey, JSON
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Uuid
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -16,7 +16,7 @@ class PipelineStage(TenantBase, Base):
     """Pipeline stage model"""
     __tablename__ = "pipeline_stages"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
     # Stage details
     name = Column(String(100), nullable=False, unique=True)
@@ -41,8 +41,8 @@ class Deal(TenantBase, Base):
     """Deal model"""
     __tablename__ = "deals"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    lead_id = Column(UUID(as_uuid=True), ForeignKey("leads.id"), nullable=False)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lead_id = Column(Uuid(as_uuid=True), ForeignKey("leads.id"), nullable=False)
     
     # Deal details
     name = Column(String(500), nullable=False)
@@ -50,7 +50,7 @@ class Deal(TenantBase, Base):
     currency = Column(String(3), default="USD")
     
     # Pipeline
-    stage_id = Column(UUID(as_uuid=True), ForeignKey("pipeline_stages.id"), nullable=True)
+    stage_id = Column(Uuid(as_uuid=True), ForeignKey("pipeline_stages.id"), nullable=True)
     expected_close_date = Column(DateTime, nullable=True)
     
     # Status

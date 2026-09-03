@@ -5,7 +5,7 @@ This mixin provides tenant_id field for all models that need tenant isolation.
 """
 
 from sqlalchemy import Column, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Uuid
 import uuid
 from app.tenant_context import get_tenant_context
 from loguru import logger
@@ -19,7 +19,7 @@ class TenantBase:
     along with their regular base class.
     """
     tenant_id = Column(
-        UUID(as_uuid=True),
+        Uuid(as_uuid=True),
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=True,  # Initially nullable for migration
         index=True,

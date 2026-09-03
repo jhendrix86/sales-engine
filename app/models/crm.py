@@ -3,7 +3,7 @@ CRM integration models
 """
 
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, Enum, ForeignKey, JSON
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Uuid
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -38,7 +38,7 @@ class CRMIntegration(TenantBase, Base):
     """CRM integration model"""
     __tablename__ = "crm_integrations"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # CRM details
     crm_type = Column(Enum(CRMType), nullable=False)
@@ -68,9 +68,9 @@ class CRMContact(TenantBase, Base):
     """CRM contact sync model"""
     __tablename__ = "crm_contacts"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    lead_id = Column(UUID(as_uuid=True), ForeignKey("leads.id"), nullable=False)
-    crm_integration_id = Column(UUID(as_uuid=True), ForeignKey("crm_integrations.id"), nullable=False)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lead_id = Column(Uuid(as_uuid=True), ForeignKey("leads.id"), nullable=False)
+    crm_integration_id = Column(Uuid(as_uuid=True), ForeignKey("crm_integrations.id"), nullable=False)
 
     # CRM details
     crm_contact_id = Column(String(255), nullable=False)

@@ -3,7 +3,7 @@ Activity models
 """
 
 from sqlalchemy import Column, String, Integer, DateTime, Enum, ForeignKey, Text, JSON
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Uuid
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -26,8 +26,8 @@ class Activity(TenantBase, Base):
     """Activity model"""
     __tablename__ = "activities"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    lead_id = Column(UUID(as_uuid=True), ForeignKey("leads.id"), nullable=False)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    lead_id = Column(Uuid(as_uuid=True), ForeignKey("leads.id"), nullable=False)
     
     # Activity details
     activity_type = Column(Enum(ActivityType), nullable=False)
