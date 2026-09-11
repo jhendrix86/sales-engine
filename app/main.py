@@ -11,7 +11,7 @@ from datetime import datetime
 import os
 
 from app.config import settings
-from app.database import init_db
+from app.database import init_db, wait_for_database
 from app.routers import leads, pipeline, crm, proposals, analytics
 from app.middleware.tenant import TenantMiddleware
 from empire_operators.middleware import SafetyBoundaryMiddleware
@@ -21,7 +21,12 @@ from empire_operators.middleware import SafetyBoundaryMiddleware
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("Starting Sales Engine...")
-    
+
+    # Wait out any post-reboot window where Postgres isn't accepting
+    # connections yet before the first query. Without this the container
+    # crash-loops instead of self-healing (BA-13).
+    await wait_for_database()
+
     # Initialize database
     await init_db()
     
